@@ -23,7 +23,7 @@ With prompt flow, you will be able to:
 
 - **Create and iteratively develop flow**
     - Create executable [flows](https://microsoft.github.io/promptflow/concepts/concept-flows.html) that link LLMs, prompts, Python code and other [tools](https://microsoft.github.io/promptflow/concepts/concept-tools.html) together.
-    - Debug and iterate your flows, especially the [interaction with LLMs](https://microsoft.github.io/promptflow/concepts/concept-connections.html) with ease.
+    - Debug and iterate your flows, especially [tracing interaction with LLMs](https://microsoft.github.io/promptflow/how-to-guides/tracing/index.html) with ease.
 - **Evaluate flow quality and performance**
     - Evaluate your flow's quality and performance with larger datasets.
     - Integrate the testing and evaluation into your CI/CD system to ensure quality of your flow.
@@ -41,7 +41,7 @@ To get started quickly, you can use a pre-built development environment. **Click
 
 If you want to get started in your local environment, first install the packages:
 
-Ensure you have a python environment, `python=3.9` is recommended.
+Ensure you have a python environment, `python>=3.9, <=3.11` is recommended.
 
 ```sh
 pip install promptflow promptflow-tools
@@ -99,7 +99,7 @@ Prompt flow is a tool designed to **build high quality LLM apps**, the developme
 
 We also offer a VS Code extension (a flow designer) for an interactive flow development experience with UI.
 
-<img src="examples/tutorials/quick-start/media/vsc.png" alt="vsc" width="1000"/>
+<img src="docs/media/readme/vsc.png" alt="vsc" width="1000"/>
 
 You can install it from the <a href="https://marketplace.visualstudio.com/items?itemName=prompt-flow.prompt-flow">visualstudio marketplace</a>.
 

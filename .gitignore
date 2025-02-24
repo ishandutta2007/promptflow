@@ -51,6 +51,7 @@ cov.xml
 .hypothesis/
 .pytest_cache/
 cover/
+test-results.xml
 
 # Translations
 *.mo
@@ -70,7 +71,8 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+scripts/docs/_build/
+scripts/docs/jupyter_execute/
 
 # PyBuilder
 .pybuilder/
@@ -171,12 +173,13 @@ connection.json
 .azureml
 # dummy custom tool package example
 hello-world-proj/**
+# gen test data config
+examples/gen_test_data/config.yml
 # secrets
 **/connections.json
 
-# doc build
-scripts/docs/_build/
 **/bash_script.sh
+**/bash_script_pytest.sh
 
 .index
 .pdfs
@@ -185,3 +188,16 @@ config.json
 # chat-with-pdf's prebuilt index
 !.pdfs/
 !.index/
+
+# Poetry
+poetry.lock
+# promptflow subpackages __init__
+src/promptflow-*/promptflow/__init__.py
+
+# Eclipse project files
+**/.project
+**/.pydevproject
+**/.settings
+
+# benchmark results
+benchmark/promptflow-serve/test_runner/locust-results/

@@ -1,7 +1,7 @@
 from openai.version import VERSION as OPENAI_VERSION
 import openai
 
-from promptflow import tool
+from promptflow.core import tool
 from promptflow.connections import AzureOpenAIConnection
 
 IS_LEGACY_OPENAI = OPENAI_VERSION.startswith("0.")
@@ -28,7 +28,7 @@ def completion(connection: AzureOpenAIConnection, prompt: str, stream: bool) -> 
     if IS_LEGACY_OPENAI:
         completion = openai.Completion.create(
             prompt=prompt,
-            engine="text-ada-001",
+            engine="gpt-35-turbo-instruct",
             max_tokens=256,
             temperature=0.8,
             top_p=1.0,
@@ -40,7 +40,7 @@ def completion(connection: AzureOpenAIConnection, prompt: str, stream: bool) -> 
     else:
         completion = get_client(connection).completions.create(
             prompt=prompt,
-            model="text-ada-001",
+            model="gpt-35-turbo-instruct",
             max_tokens=256,
             temperature=0.8,
             top_p=1.0,
@@ -58,7 +58,7 @@ def completion(connection: AzureOpenAIConnection, prompt: str, stream: bool) -> 
                     else:
                         yield chunk.choices[0].text or ""
 
-        return "".join(generator())
+        return generator()
     else:
         if IS_LEGACY_OPENAI:
             return getattr(completion.choices[0], "text", "")

@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
+from promptflow._proxy._base_executor_proxy import APIBasedExecutorProxy
+from promptflow._proxy._errors import ExecutorServiceUnhealthy
 from promptflow._utils.exception_utils import ExceptionPresenter
-from promptflow.batch._base_executor_proxy import APIBasedExecutorProxy
-from promptflow.batch._errors import ExecutorServiceUnhealthy
 from promptflow.contracts.run_info import Status
 from promptflow.exceptions import ErrorTarget, ValidationException
-from promptflow.executor._errors import ConnectionNotFound
+from promptflow.executor._errors import GetConnectionError
 from promptflow.storage._run_storage import AbstractRunStorage
 
 from ...mock_execution_server import _get_aggr_result_dict, _get_line_result_dict
@@ -30,17 +30,19 @@ class TestAPIBasedExecutorProxy:
         run_id = "test_run_id"
         index = 1
         inputs = {"question": "test"}
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock:
+        with patch("httpx.Response.raise_for_status"):
             line_result_dict = _get_line_result_dict(run_id, index, inputs, has_error=has_error)
             status_code = 400 if has_error else 200
-            mock.return_value = httpx.Response(status_code, json=line_result_dict)
-            line_result = await mock_executor_proxy.exec_line_async(inputs, index, run_id)
-            assert line_result.output == {} if has_error else {"answer": "Hello world!"}
-            assert line_result.run_info.run_id == run_id
-            assert line_result.run_info.index == index
-            assert line_result.run_info.status == Status.Failed if has_error else Status.Completed
-            assert line_result.run_info.inputs == inputs
-            assert (line_result.run_info.error is not None) == has_error
+            response = httpx.Response(status_code=status_code, json=line_result_dict)
+            with patch("httpx.AsyncClient.post", return_value=response):
+                line_result = await mock_executor_proxy.exec_line_async(inputs, index, run_id)
+                assert line_result.output == {} if has_error else {"answer": "Hello world!"}
+                assert line_result.run_info.run_id == f"{run_id}_{index}"
+                assert line_result.run_info.root_run_id == run_id
+                assert line_result.run_info.index == index
+                assert line_result.run_info.status == Status.Failed if has_error else Status.Completed
+                assert line_result.run_info.inputs == inputs
+                assert (line_result.run_info.error is not None) == has_error
 
     @pytest.mark.asyncio
     async def test_exec_aggregation_async(self):
@@ -48,15 +50,16 @@ class TestAPIBasedExecutorProxy:
         run_id = "test_run_id"
         batch_inputs = {"question": ["test", "error"]}
         aggregation_inputs = {"${get_answer.output}": ["Incorrect", "Correct"]}
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock:
+        with patch("httpx.Response.raise_for_status"):
             aggr_result_dict = _get_aggr_result_dict(run_id, aggregation_inputs)
-            mock.return_value = httpx.Response(200, json=aggr_result_dict)
-            aggr_result = await mock_executor_proxy.exec_aggregation_async(batch_inputs, aggregation_inputs, run_id)
-            assert aggr_result.metrics == {"accuracy": 0.5}
-            assert len(aggr_result.node_run_infos) == 1
-            assert aggr_result.node_run_infos["aggregation"].flow_run_id == run_id
-            assert aggr_result.node_run_infos["aggregation"].inputs == aggregation_inputs
-            assert aggr_result.node_run_infos["aggregation"].status == Status.Completed
+            response = httpx.Response(200, json=aggr_result_dict)
+            with patch("httpx.AsyncClient.post", return_value=response):
+                aggr_result = await mock_executor_proxy.exec_aggregation_async(batch_inputs, aggregation_inputs, run_id)
+                assert aggr_result.metrics == {"accuracy": 0.5}
+                assert len(aggr_result.node_run_infos) == 1
+                assert aggr_result.node_run_infos["aggregation"].flow_run_id == run_id
+                assert aggr_result.node_run_infos["aggregation"].inputs == aggregation_inputs
+                assert aggr_result.node_run_infos["aggregation"].status == Status.Completed
 
     @pytest.mark.asyncio
     async def test_ensure_executor_startup_when_no_error(self):
@@ -85,8 +88,9 @@ class TestAPIBasedExecutorProxy:
     async def test_ensure_executor_startup_when_existing_validation_error(self):
         # prepare the error file
         error_file = Path(mkdtemp()) / "error.json"
-        error_message = "Connection 'aoai_conn' not found"
-        error_dict = ExceptionPresenter.create(ConnectionNotFound(message=error_message)).to_dict()
+        error_dict = ExceptionPresenter.create(
+            GetConnectionError(connection="aoai_conn", node_name="mock", error=Exception("mock"))
+        ).to_dict()
         with open(error_file, "w") as file:
             json.dump(error_dict, file, indent=4)
 
@@ -95,7 +99,7 @@ class TestAPIBasedExecutorProxy:
             mock.side_effect = ExecutorServiceUnhealthy("executor unhealthy")
             with pytest.raises(ValidationException) as ex:
                 await mock_executor_proxy.ensure_executor_startup(error_file)
-            assert ex.value.message == error_message
+            assert "Get connection 'aoai_conn' for node 'mock' error: mock" in ex.value.message
             assert ex.value.target == ErrorTarget.BATCH
 
     @pytest.mark.asyncio
@@ -142,23 +146,19 @@ class TestAPIBasedExecutorProxy:
         "response, expected_result",
         [
             (
-                httpx.Response(200, json={"result": "test"}),
-                {"result": "test"},
-            ),
-            (
                 httpx.Response(500, json={"error": "test error"}),
                 "test error",
             ),
             (
                 httpx.Response(400, json={"detail": "test"}),
                 {
-                    "message": 'Unexpected error when executing a line, status code: 400, error: {"detail": "test"}',
+                    "message": 'Unexpected error when executing a line, status code: 400, error: {"detail":"test"}',
                     "messageFormat": (
                         "Unexpected error when executing a line, " "status code: {status_code}, error: {error}"
                     ),
                     "messageParameters": {
                         "status_code": "400",
-                        "error": '{"detail": "test"}',
+                        "error": '{"detail":"test"}',
                     },
                     "referenceCode": "Unknown",
                     "code": "SystemError",
@@ -189,9 +189,9 @@ class TestAPIBasedExecutorProxy:
             ),
         ],
     )
-    async def test_process_http_response(self, response, expected_result):
+    async def test_process_error_response(self, response, expected_result):
         mock_executor_proxy = await MockAPIBasedExecutorProxy.create("")
-        assert mock_executor_proxy._process_http_response(response) == expected_result
+        assert mock_executor_proxy._process_error_response(response) == expected_result
 
 
 class MockAPIBasedExecutorProxy(APIBasedExecutorProxy):

@@ -1,13 +1,9 @@
 # Manage connections
 
-:::{admonition} Experimental feature
-This is an experimental feature, and may change at any time. Learn [more](faq.md#stable-vs-experimental).
-:::
-
 [Connection](../../concepts/concept-connections.md) helps securely store and manage secret keys or other sensitive credentials required for interacting with LLM (Large Language Models) and other external tools, for example, Azure Content Safety.
 
 :::{note}
-To use azureml workspace connection locally, refer to [this guide](../how-to-guides/set-global-configs.md#connectionprovider).
+This document target for manage connections locally. To use Azure AI connections locally, refer to [this guide](../cloud/azureai/consume-connections-from-azure-ai.md).
 :::
 
 ## Connection types
@@ -63,7 +59,7 @@ The expected result is as follows if the connection created successfully.
 Using SDK, each connection type has a corresponding class to create a connection. The following code snippet shows how to import the required class and create the connection:
 
 ```python
-from promptflow import PFClient
+from promptflow.client import PFClient
 from promptflow.entities import AzureOpenAIConnection, CustomConnection
 
 # Get a pf client to manage connections
@@ -73,7 +69,7 @@ pf = PFClient()
 connection = AzureOpenAIConnection(
     name="my_azure_open_ai_connection", 
     api_key="<your-api-key>", 
-    api_base="<your-endpoint>"
+    api_base="<your-endpoint>",
     api_version="2023-03-15-preview"
 )
 
@@ -112,7 +108,7 @@ On the VS Code primary sidebar > prompt flow pane. You can find the connections 
 :sync: CLI
 The commands below show how to update existing connections with new values:
 ```bash
-# Update an azure open ai connection with a new api base
+# Update an azure OpenAI connection with a new api base
 pf connection update -n my_azure_open_ai_connection --set api_base='new_value'
 # Update a custom connection
 pf connection update -n my_custom_connection --set configs.other_config='new_value'
@@ -124,7 +120,7 @@ pf connection update -n my_custom_connection --set configs.other_config='new_val
 :sync: SDK
 The code snippet below shows how to update existing connections with new values:
 ```python
-# Update an azure open ai connection with a new api base
+# Update an azure OpenAI connection with a new api base
 connection = pf.connections.get(name="my_azure_open_ai_connection")
 connection.api_base = "new_value"
 connection.api_key = "<original-key>"  # secrets are required when updating connection using sdk
@@ -162,7 +158,7 @@ pf connection list
 :sync: SDK
 List connection command will return the connections object list, note that all secrets and api keys will be scrubbed:
 ```python
-from promptflow import PFClient
+from promptflow.client import PFClient
 # Get a pf client to manage connections
 pf = PFClient()
 # List and print connections
@@ -193,12 +189,12 @@ pf connection delete -n <connection_name>
 :sync: SDK
 Delete a connection with the following code snippet:
 ```python
-from promptflow import PFClient
+from promptflow.client import PFClient
 
 # Get a pf client to manage connections
 pf = PFClient()
 # Delete the connection with specific name
-client.connections.delete(name="my_custom_connection")
+pf.connections.delete(name="my_custom_connection")
 ```
 :::
 
@@ -209,6 +205,32 @@ On the VS Code primary sidebar > prompt flow pane. You can find the connections 
 ![img](../media/how-to-guides/vscode_update_delete_connection.png)
 :::
 ::::
+
+## Load from environment variables
+With `promptflow>=1.8.0`, user is able to load a connection object from os environment variables with `<ConnectionType>.from_env` func.
+Note that the connection object will **NOT BE CREATED** to local database.
+
+Supported types are as follows:
+
+| Connection Type       | Field | Relevant Environment Variable                    |
+|-----------------------| --- |--------------------------------------------------|
+| OpenAIConnection | api_key | OPENAI_API_KEY                                   |
+|  | organization | OPENAI_ORG_ID                                    |
+|  | base_url | OPENAI_BASE_URL                                  |
+| AzureOpenAIConnection | api_key | AZURE_OPENAI_API_KEY                             |
+|  | api_base | AZURE_OPENAI_ENDPOINT                            |
+|  | api_version | OPENAI_API_VERSION |
+
+For example, with `OPENAI_API_KEY` set to environment, an `OpenAIConnection` object can be loaded with `OpenAIConnection.from_env()`.
+
+## Authenticate with Microsoft Entra ID
+[Microsoft Entra ID](https://learn.microsoft.com/entra/fundamentals/whatis) is a cloud-based identity and access management service that enables your employees access external resources.
+
+Some promptflow connection types supports connection authentication with Microsoft Entra ID.
+
+| Connection Type       | Yaml Field | Value     | Package Requirements                                          | VS Code Extension |
+| --------------------- |------------|-----------|---------------------------------------------------------------|------------------|
+| AzureOpenAIConnection | auth_mode  | meid_token | `promptflow[azureml-serving]>=1.7.0, promptflow-tools>=1.4.0` | 1.20.0           |
 
 
 ## Next steps

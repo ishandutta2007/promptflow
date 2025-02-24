@@ -58,10 +58,16 @@ def write_notebook_workflow(notebook, name, output_telemetry=Telemetry()):
     schedule_minute = name_hash % 60
     schedule_hour = (name_hash // 60) % 4 + 19  # 19-22 UTC
 
-    if "examples/tutorials" in gh_working_dir:
-        notebook_path = Path(ReadmeStepsManage.git_base_dir()) / str(notebook)
-        path_filter = resolve_tutorial_resource(workflow_name, notebook_path.resolve())
-    elif "samples_configuration" in workflow_name:
+    notebook_path = Path(ReadmeStepsManage.git_base_dir()) / str(notebook)
+    try:
+        # resolve tutorial resources
+        path_filter = resolve_tutorial_resource(workflow_name, notebook_path.resolve(), output_telemetry)
+    except Exception:
+        if "examples/tutorials" in gh_working_dir:
+            raise
+        else:
+            pass
+    if "samples_configuration" in workflow_name:
         # exception, samples configuration is very simple and not related to other prompt flow examples
         path_filter = (
             "[ examples/configuration.ipynb, .github/workflows/samples_configuration.yml ]"
@@ -72,9 +78,10 @@ def write_notebook_workflow(notebook, name, output_telemetry=Telemetry()):
     # these workflows require config.json to init PF/ML client
     workflows_require_config_json = [
         "configuration",
-        "flowinpipeline",
+        "runflowwithpipeline",
         "quickstartazure",
         "cloudrunmanagement",
+        "chatwithclassbasedflowazure",
     ]
     if any(keyword in workflow_name for keyword in workflows_require_config_json):
         template = env.get_template("workflow_config_json.yml.jinja2")
@@ -82,6 +89,8 @@ def write_notebook_workflow(notebook, name, output_telemetry=Telemetry()):
         template = env.get_template("pdf_workflow.yml.jinja2")
     elif "flowasfunction" in workflow_name:
         template = env.get_template("flow_as_function.yml.jinja2")
+    elif "traceautogengroupchat" in workflow_name:
+        template = env.get_template("autogen_workflow.yml.jinja2")
 
     content = template.render(
         {
@@ -136,6 +145,8 @@ def no_readme_generation_filter(item, index, array) -> bool:
     """
     try:
         if item.endswith("test.ipynb"):
+            return False
+        if "examples/flows/integrations/" in item:
             return False
         # read in notebook
         with open(item, "r", encoding="utf-8") as f:

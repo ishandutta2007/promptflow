@@ -80,7 +80,7 @@ pf run create --flow web-classification --data web-classification/data.jsonl --v
 :sync: SDK
 
 ```python
-from promptflow import PFClient
+from promptflow.client import PFClient
 
 pf = PFClient()  # get a promptflow client
 flow = "web-classification"
@@ -113,4 +113,4 @@ After the variant run is created, you can evaluate the variant run with a evalua
 Learn more about:
 - [Run and evaluate a flow](./run-and-evaluate-a-flow/index.md)
 - [Deploy a flow](./deploy-a-flow/index.md)
-- [Prompt flow in Azure AI](../cloud/azureai/quick-start/index.md)
+- [Prompt flow in Azure AI](../cloud/azureai/run-promptflow-in-azure-ai.md)

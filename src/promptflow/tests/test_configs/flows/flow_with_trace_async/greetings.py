@@ -1,6 +1,6 @@
 import asyncio
-from time import sleep
-from promptflow import tool, trace
+from promptflow.core import tool
+from promptflow.tracing import trace
 
 
 @trace
@@ -28,6 +28,6 @@ async def format_greeting(user_name):
 @tool
 async def greetings(user_id):
     user_name = await get_user_name(user_id)
-    greeting = await format_greeting(user_name) 
+    greeting = await format_greeting(user_name)
     print(greeting)
     return {"greeting": greeting}

@@ -192,6 +192,7 @@ pfazure run create [--file]
                    [--stream]
                    [--environment-variables]
                    [--connections]
+                   [--resume-from] # require promptflow>=1.8.0
                    [--set]
                    [--subscription]
                    [--resource-group]
@@ -206,7 +207,17 @@ Local path to the YAML file containing the prompt flow run specification; can be
 
 `--flow`
 
-Local path to the flow directory.
+The flow source to create the run. It could be:
+- Local path to the flow directory.
+  ```bash
+  pfazure run create --flow <path-to-flow-directory> --data <path-to-data-file> --column-mapping <key-value-pair>
+  ```
+- The flow name on azure with a prefix `azureml:`. Flow name is a guid that can be found from 2 ways:
+  - After creating a flow to azure, it can be found in the printed message in "name" attribute.
+  - Open a flow in azure portal, the guid is in the url. e.g. https://ml.azure.com/prompts/flow/{workspace-id}/{flow-name}/xxx
+  ```bash
+  pfazure run create --flow azureml:<flow-name> --data <path-to-data-file> --column-mapping <key-value-pair>
+  ```
 
 `--data`
 
@@ -226,7 +237,7 @@ Node & variant name in format of `${node_name.variant_name}`.
 
 `--stream -s`
 
-Indicates whether to stream the run's logs to the console.  
+Indicates whether to stream the run's logs to the console.
 default value: False
 
 `--environment-variables`
@@ -240,6 +251,11 @@ specified will be set into os.environ.
 
 Overwrite node level connections with provided value.
 Example: `--connections node1.connection=test_llm_connection node1.deployment_name=gpt-35-turbo`
+
+`--resume-from`
+
+Create a run resume from an existing run. (Require promptflow>=1.8.0)
+Example: `--resume-from <run_name>`
 
 `--set`
 
@@ -275,17 +291,17 @@ pfazure run list [--archived-only]
 
 `--archived-only`
 
-List archived runs only.  
+List archived runs only.
 default value: False
 
 `--include-archived`
 
-List archived runs and active runs.  
+List archived runs and active runs.
 default value: False
 
 `--max-results -r`
 
-Max number of results to return. Default is 50, upper bound is 100.  
+Max number of results to return. Default is 50, upper bound is 100.
 default value: 50
 
 `--subscription`

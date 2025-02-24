@@ -6,15 +6,15 @@ import pytest
 
 from promptflow._core._errors import FlowOutputUnserializable, InvalidSource
 from promptflow._core.tools_manager import APINotFound
-from promptflow._sdk._constants import DAG_FILE_NAME
+from promptflow._utils.flow_utils import resolve_flow_path
 from promptflow._utils.utils import dump_list_to_jsonl
 from promptflow.batch import BatchEngine
 from promptflow.contracts._errors import FailedToImportModule
 from promptflow.executor import FlowExecutor
 from promptflow.executor._errors import (
-    ConnectionNotFound,
     DuplicateNodeName,
     EmptyOutputReference,
+    GetConnectionError,
     InputNotFound,
     InputReferenceNotFound,
     InputTypeError,
@@ -177,7 +177,7 @@ class TestValidation:
     @pytest.mark.parametrize(
         "flow_folder, error_class, inner_class",
         [
-            ("invalid_connection", ResolveToolError, ConnectionNotFound),
+            ("invalid_connection", ResolveToolError, GetConnectionError),
             ("tool_type_missing", ResolveToolError, NotImplementedError),
             ("wrong_module", FailedToImportModule, None),
             ("wrong_api", ResolveToolError, APINotFound),
@@ -339,9 +339,10 @@ class TestValidation:
         self, path_root: str, flow_folder, node_name, line_input, error_class, error_msg, dev_connections
     ):
         # Single Node run - the inputs are from flow_inputs + dependency_nodes_outputs
+        _, flow_file = resolve_flow_path(flow_folder, path_root, check_flow_exist=False)
         with pytest.raises(error_class) as exe_info:
             FlowExecutor.load_and_exec_node(
-                flow_file=DAG_FILE_NAME,
+                flow_file=flow_file,
                 node_name=node_name,
                 flow_inputs=line_input,
                 dependency_nodes_outputs={},

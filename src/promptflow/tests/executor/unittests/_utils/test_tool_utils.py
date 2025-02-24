@@ -5,17 +5,19 @@ import pytest
 
 from promptflow._core._errors import DuplicateToolMappingError
 from promptflow._utils.tool_utils import (
-    DynamicListError,
     ListFunctionResponseError,
+    RetrieveToolFuncResultError,
+    RetrieveToolFuncResultValidationError,
     _find_deprecated_tools,
     append_workspace_triple_to_func_input_params,
     function_to_interface,
     load_function_from_function_path,
     param_to_definition,
     validate_dynamic_list_func_response_type,
+    validate_tool_func_result,
 )
 from promptflow.connections import AzureOpenAIConnection, CustomConnection
-from promptflow.contracts.tool import ValueType, Tool, ToolType
+from promptflow.contracts.tool import Tool, ToolFuncCallScenario, ToolType, ValueType
 
 
 # mock functions for dynamic list function testing
@@ -321,7 +323,7 @@ class TestToolUtils:
     )
     def test_validate_dynamic_list_func_response_type_with_error(self, res, err_msg):
         error_message = (
-            f"Unable to display list of items due to '{err_msg}'. \nPlease contact the tool "
+            f"Unable to retrieve result due to '{err_msg}'. \nPlease contact the tool "
             f"author/support team for troubleshooting assistance."
         )
         with pytest.raises(ListFunctionResponseError, match=error_message):
@@ -329,13 +331,19 @@ class TestToolUtils:
 
     def test_load_function_from_function_path(self, mock_module_with_list_func):
         func_path = "my_tool_package.tools.tool_with_dynamic_list_input.my_list_func"
-        load_function_from_function_path(func_path)
+        tool_func = load_function_from_function_path(func_path)
+        assert callable(tool_func)
+
+    def test_load_function_from_script(self):
+        func_path = f"{__file__}:mock_dynamic_list_func1"
+        tool_func = load_function_from_function_path(func_path)
+        assert callable(tool_func)
 
     def test_load_function_from_function_path_with_error(self, mock_module_with_list_func):
         func_path = "mock_func_path"
         with pytest.raises(
-            DynamicListError,
-            match="Unable to display list of items due to 'Failed to parse function from function path: "
+            RetrieveToolFuncResultError,
+            match="Unable to retrieve result due to 'Failed to parse function from function path: "
             "'mock_func_path'. Expected format: format 'my_module.my_func'. Detailed error: not enough "
             "values to unpack \\(expected 2, got 1\\)'. \nPlease contact the tool author/support team for "
             "troubleshooting assistance.",
@@ -344,8 +352,8 @@ class TestToolUtils:
 
         func_path = "fake_tool_pkg.tools.tool_with_dynamic_list_input.my_list_func"
         with pytest.raises(
-            DynamicListError,
-            match="Unable to display list of items due to 'Failed to parse function from function path: "
+            RetrieveToolFuncResultError,
+            match="Unable to retrieve result due to 'Failed to parse function from function path: "
             "'fake_tool_pkg.tools.tool_with_dynamic_list_input.my_list_func'. Expected format: format "
             "'my_module.my_func'. Detailed error: No module named 'fake_tool_pkg''. \nPlease contact the tool "
             "author/support team for troubleshooting assistance.",
@@ -354,13 +362,39 @@ class TestToolUtils:
 
         func_path = "my_tool_package.tools.tool_with_dynamic_list_input.my_field"
         with pytest.raises(
-            DynamicListError,
-            match="Unable to display list of items due to 'Failed to parse function from function path: "
+            RetrieveToolFuncResultError,
+            match="Unable to retrieve result due to 'Failed to parse function from function path: "
             "'my_tool_package.tools.tool_with_dynamic_list_input.my_field'. Expected format: "
-            "format 'my_module.my_func'. Detailed error: Unable to display list of items due to ''1' "
+            "format 'my_module.my_func'. Detailed error: Unable to retrieve result due to ''1' "
             "is not callable.'. \nPlease contact the tool author/support team for troubleshooting assistance.",
         ):
             load_function_from_function_path(func_path)
+
+    @pytest.mark.parametrize(
+        "func_call_scenario, result, err_msg",
+        [
+            (
+                ToolFuncCallScenario.REVERSE_GENERATED_BY,
+                "dummy_result",
+                f"ToolFuncCallScenario {ToolFuncCallScenario.REVERSE_GENERATED_BY.value} response must be a dict. "
+                f"dummy_result is not a dict.",
+            ),
+            (
+                "dummy_scenario",
+                "dummy_result",
+                f"Invalid tool func call scenario: dummy_scenario. "
+                f"Available scenarios are {list(ToolFuncCallScenario)}",
+            ),
+        ],
+    )
+    def test_validate_tool_func_result(self, func_call_scenario, result, err_msg):
+        error_message = (
+            f"Unable to retrieve result due to '{err_msg}'. \nPlease contact the tool author/support team "
+            f"for troubleshooting assistance."
+        )
+        with pytest.raises(RetrieveToolFuncResultValidationError) as e:
+            validate_tool_func_result(func_call_scenario, result)
+        assert error_message == str(e.value)
 
     def test_find_deprecated_tools(self):
         package_tools = {

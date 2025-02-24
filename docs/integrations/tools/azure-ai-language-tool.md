@@ -18,7 +18,7 @@ Azure AI Language enables users with task-oriented and optimized pre-trained or 
 ## Requirements
 PyPI package: [`promptflow-azure-ai-language`](https://pypi.org/project/promptflow-azure-ai-language/).
 - For AzureML users: 
-    follow this [wiki](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/how-to-custom-tool-package-creation-and-usage?view=azureml-api-2#prepare-runtime), starting from `Prepare runtime`.
+    follow this [wiki](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/how-to-custom-tool-package-creation-and-usage?view=azureml-api-2#prepare-compute-session), starting from `Prepare compute session`.
 - For local users: 
     ```
     pip install promptflow-azure-ai-language
@@ -47,7 +47,7 @@ my_document = {
     "language": "en"
 }
 ```
-When a tool parameter is of type `Conversation`, it requires a `dict` object of [this](https://learn.microsoft.com/en-us/rest/api/language/conversation-analysis-runtime/submit-job?view=rest-language-2023-04-01&tabs=HTTP#textconversation) or [this](https://learn.microsoft.com/en-us/rest/api/language/conversation-analysis-runtime/submit-job?view=rest-language-2023-04-01&tabs=HTTP#transcriptconversation) specification.
+When a tool parameter is of type `Conversation`, it requires a `dict` object.
 
 Example:
 ```

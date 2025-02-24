@@ -1,5 +1,7 @@
 ---
 resources: examples/connections/azure_openai.yml, examples/flows/chat/chat-with-pdf
+cloud: local
+category: rag
 ---
 
 # Tutorial: Chat with PDF
@@ -73,7 +75,7 @@ Create a .env file in the second chat_with_pdf directory (same directory with th
 
 Rename the .env.example file in chat_with_pdf directory and modify per your need.
 
-> If you're using Open AI, your .env should look like:
+> If you're using OpenAI, your .env should look like:
 ```ini
 OPENAI_API_KEY=<open_ai_key>
 EMBEDDING_MODEL_DEPLOYMENT_NAME=<text-embedding-ada-002>
@@ -86,7 +88,7 @@ VERBOSE=False
 ```
 Note: if you have an org id, it can be set via OPENAI_ORG_ID=<your_org_id>
 
-> If you're using Azure Open AI, you .env should look like:
+> If you're using Azure OpenAI, you .env should look like:
 ```ini
 OPENAI_API_TYPE=azure
 OPENAI_API_BASE=<AOAI_endpoint>
@@ -162,7 +164,7 @@ Check out below:
 
 E.g. build_index_tool wrapper:
 ```python
-from promptflow import tool
+from promptflow.core import tool
 from chat_with_pdf.build_index import create_faiss_index
 
 

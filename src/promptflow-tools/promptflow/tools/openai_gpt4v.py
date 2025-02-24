@@ -1,26 +1,15 @@
-try:
-    from openai import OpenAI as OpenAIClient
-except Exception:
-    raise Exception(
-        "Please upgrade your OpenAI package to version 1.0.0 or later using the command: pip install --upgrade openai.")
-
 from promptflow.connections import OpenAIConnection
 from promptflow.contracts.types import PromptTemplate
 from promptflow._internal import ToolProvider, tool
-from promptflow.tools.common import render_jinja_template, handle_openai_error, \
-    parse_chat, post_process_chat_api_response, preprocess_template_string, \
-    find_referenced_image_set, convert_to_chat_list, normalize_connection_config
+from promptflow.tools.common import handle_openai_error, build_messages, \
+    post_process_chat_api_response, preprocess_template_string, \
+    find_referenced_image_set, convert_to_chat_list, init_openai_client
 
 
 class OpenAI(ToolProvider):
     def __init__(self, connection: OpenAIConnection):
         super().__init__()
-        self._connection_dict = normalize_connection_config(connection)
-        self._client = OpenAIClient(
-            # disable OpenAI's built-in retry mechanism by using our own retry
-            # for better debuggability and real-time status updates.
-            max_retries=0,
-            **self._connection_dict)
+        self._client = init_openai_client(connection)
 
     @tool(streaming_option_parameter="stream")
     @handle_openai_error()
@@ -36,16 +25,16 @@ class OpenAI(ToolProvider):
         max_tokens: int = None,
         presence_penalty: float = 0,
         frequency_penalty: float = 0,
+        seed: int = None,
+        detail: str = 'auto',
         **kwargs,
     ) -> [str, dict]:
-        # keep_trailing_newline=True is to keep the last \n in the prompt to avoid converting "user:\t\n" to "user:".
         prompt = preprocess_template_string(prompt)
         referenced_images = find_referenced_image_set(kwargs)
 
         # convert list type into ChatInputList type
         converted_kwargs = convert_to_chat_list(kwargs)
-        chat_str = render_jinja_template(prompt, trim_blocks=True, keep_trailing_newline=True, **converted_kwargs)
-        messages = parse_chat(chat_str, list(referenced_images))
+        messages = build_messages(prompt=prompt, images=list(referenced_images), detail=detail, **converted_kwargs)
 
         params = {
             "model": model,
@@ -62,6 +51,8 @@ class OpenAI(ToolProvider):
             params["stop"] = stop
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
+        if seed is not None:
+            params["seed"] = seed
 
         completion = self._client.chat.completions.create(**params)
-        return post_process_chat_api_response(completion, stream, None)
+        return post_process_chat_api_response(completion, stream)

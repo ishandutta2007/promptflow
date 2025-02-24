@@ -13,7 +13,7 @@ Install promptflow sdk and other dependencies:
 pip install -r requirements.txt
 ```
 
-Ensure you have put your azure open ai endpoint key in .env file.
+Ensure you have put your azure OpenAI endpoint key in .env file.
 
 ```bash
 cat .env
@@ -37,7 +37,7 @@ pf connection create -f .env --name custom_connection
 
 3. test flow with single line input
 ```bash
-pf flow test --flow . --input ./data/denormalized-flat.jsonl
+pf flow test --flow . --inputs ./data/sample.json
 ```
 
 4. run with multiple lines input

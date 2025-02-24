@@ -9,6 +9,16 @@
     },
     "module": "promptflow.connections"
   },
+  "azure_open_ai_connection_meid": {
+    "type": "AzureOpenAIConnection",
+    "value": {
+      "api_base": "aoai-api-endpoint",
+      "api_type": "azure",
+      "api_version": "2023-07-01-preview",
+      "auth_mode": "meid_token"
+    },
+    "module": "promptflow.connections"
+  },
   "serp_connection": {
     "type": "SerpConnection",
     "value": {
@@ -65,6 +75,22 @@
       "api_version": "2023-10-01",
       "api_type": "Content Safety",
       "name": "prompt-flow-acs-tool-test"
+    },
+    "module": "promptflow.connections"
+  },
+  "serverless_connection": {
+    "type": "ServerlessConnection",
+    "value": {
+      "api_key": "serverless-api-key",
+      "api_base": "serverless-endpoint-url"
+    },
+    "module": "promptflow.connections"
+  },
+  "serverless_connection_embedding": {
+    "type": "ServerlessConnection",
+    "value": {
+      "api_key": "serverless-embedding-api-key",
+      "api_base": "serverless-embedding-endpoint-url"
     },
     "module": "promptflow.connections"
   }

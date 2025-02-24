@@ -1,4 +1,6 @@
 import json
+import platform
+import signal
 import socket
 import subprocess
 from pathlib import Path
@@ -7,9 +9,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from promptflow._constants import FlowLanguage
 from promptflow._core._errors import MetaFileNotFound, MetaFileReadError
+from promptflow._proxy import ProxyFactory
+from promptflow._proxy._csharp_executor_proxy import CSharpExecutorProxy
 from promptflow._sdk._constants import FLOW_TOOLS_JSON, PROMPT_FLOW_DIR_NAME
-from promptflow.batch import CSharpExecutorProxy
 from promptflow.executor._result import AggregationResult
 
 from ...utils import get_flow_folder, get_yaml_file
@@ -20,6 +24,9 @@ async def get_executor_proxy():
     working_dir = get_flow_folder("csharp_flow")
     with patch.object(CSharpExecutorProxy, "ensure_executor_startup", return_value=None):
         return await CSharpExecutorProxy.create(flow_file, working_dir)
+
+
+DUMMY_FLOW_FILE = get_yaml_file("csharp_flow")
 
 
 @pytest.mark.unittest
@@ -57,7 +64,10 @@ class TestCSharpExecutorProxy:
         await executor_proxy.destroy()
 
         mock_process.poll.assert_called_once()
-        mock_process.terminate.assert_called_once()
+        if platform.system() != "Windows":
+            mock_process.terminate.assert_called_once()
+        else:
+            mock_process.send_signal.assert_called_once_with(signal.CTRL_BREAK_EVENT)
         mock_process.wait.assert_called_once_with(timeout=5)
         mock_process.kill.assert_not_called()
 
@@ -72,7 +82,10 @@ class TestCSharpExecutorProxy:
         await executor_proxy.destroy()
 
         mock_process.poll.assert_called_once()
-        mock_process.terminate.assert_called_once()
+        if platform.system() != "Windows":
+            mock_process.terminate.assert_called_once()
+        else:
+            mock_process.send_signal.assert_called_once_with(signal.CTRL_BREAK_EVENT)
         mock_process.wait.assert_called_once_with(timeout=5)
         mock_process.kill.assert_called_once()
 
@@ -105,13 +118,13 @@ class TestCSharpExecutorProxy:
         with open(tool_meta_file, "w") as file:
             json.dump(expected_tool_meta, file, indent=4)
 
-        tool_meta = CSharpExecutorProxy.get_tool_metadata("", working_dir)
+        tool_meta = CSharpExecutorProxy.generate_flow_tools_json(DUMMY_FLOW_FILE, working_dir)
         assert tool_meta == expected_tool_meta
 
     def test_get_tool_metadata_failed_with_file_not_found(self):
         working_dir = Path(mkdtemp())
         with pytest.raises(MetaFileNotFound):
-            CSharpExecutorProxy.get_tool_metadata("", working_dir)
+            CSharpExecutorProxy.generate_flow_tools_json(DUMMY_FLOW_FILE, working_dir)
 
     def test_get_tool_metadata_failed_with_content_not_json(self):
         working_dir = Path(mkdtemp())
@@ -120,7 +133,7 @@ class TestCSharpExecutorProxy:
         tool_meta_file.touch()
 
         with pytest.raises(MetaFileReadError):
-            CSharpExecutorProxy.get_tool_metadata("", working_dir)
+            CSharpExecutorProxy.generate_flow_tools_json(DUMMY_FLOW_FILE, working_dir)
 
     def test_find_available_port(self):
         port = CSharpExecutorProxy.find_available_port()
@@ -131,3 +144,17 @@ class TestCSharpExecutorProxy:
                 s.bind(("localhost", int(port)))
         except OSError:
             pytest.fail("Port is not actually available")
+
+    @pytest.mark.parametrize(
+        "entry_str, expected_result",
+        [
+            pytest.param(
+                "(FunctionModeBasic)FunctionModeBasic.MyEntry.WritePoemReturnObjectAsync",
+                True,
+                id="flex_flow_class_init",
+            ),
+        ],
+    )
+    def test_is_csharp_flex_flow_entry(self, entry_str: str, expected_result: bool):
+        result = ProxyFactory().create_inspector_proxy(FlowLanguage.CSharp).is_flex_flow_entry(entry_str)
+        assert result is expected_result

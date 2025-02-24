@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from unittest.mock import patch
 from jinja2.exceptions import TemplateSyntaxError
 from openai import (
     APIConnectionError,
@@ -11,12 +12,13 @@ from openai import (
 from promptflow.tools.aoai import chat, completion
 from promptflow.tools.common import handle_openai_error
 from promptflow.tools.exception import ChatAPIInvalidRole, WrappedOpenAIError, to_openai_error_message, \
-    JinjaTemplateError, LLMError, ChatAPIFunctionRoleInvalidFormat
+    JinjaTemplateError, LLMError, ChatAPIFunctionRoleInvalidFormat, ExceedMaxRetryTimes
 from promptflow.tools.openai import chat as openai_chat
 from promptflow.tools.aoai_gpt4v import AzureOpenAI as AzureOpenAIVision
 from pytest_mock import MockerFixture
 
 from promptflow.exceptions import UserErrorException
+from tests.utils import Deployment
 
 
 @pytest.mark.usefixtures("use_secrets_config_file")
@@ -92,6 +94,13 @@ class TestHandleOpenAIError:
         assert mock_method.call_count == 1
         assert exc_info.value.error_codes == error_codes.split("/")
 
+    def create_api_connection_error_with_cause():
+        error = APIConnectionError(
+            request=httpx.Request('GET', 'https://www.example.com')
+        )
+        error.__cause__ = Exception("Server disconnected without sending a response.")
+        return error
+
     @pytest.mark.parametrize(
         "dummyExceptionList",
         [
@@ -103,10 +112,9 @@ class TestHandleOpenAIError:
                     APIConnectionError(
                         message="('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
                         request=httpx.Request('GET', 'https://www.example.com')),
+                    create_api_connection_error_with_cause(),
                     InternalServerError("Something went wrong", response=httpx.Response(
                         503, request=httpx.Request('GET', 'https://www.example.com')), body=None),
-                    UnprocessableEntityError("Something went wrong", response=httpx.Response(
-                        422, request=httpx.Request('GET', 'https://www.example.com')), body=None)
                 ]
             ),
         ],
@@ -145,9 +153,6 @@ class TestHandleOpenAIError:
                     InternalServerError("Something went wrong", response=httpx.Response(
                         503, request=httpx.Request('GET', 'https://www.example.com'), headers={"retry-after": "0.3"}),
                                         body=None),
-                    UnprocessableEntityError("Something went wrong", response=httpx.Response(
-                        422, request=httpx.Request('GET', 'https://www.example.com'), headers={"retry-after": "0.3"}),
-                                             body=None)
                 ]
             ),
         ],
@@ -178,6 +183,23 @@ class TestHandleOpenAIError:
             ]
             mock_sleep.assert_has_calls(expected_calls)
 
+    def test_unprocessable_entity_error(self, mocker: MockerFixture):
+        unprocessable_entity_error = UnprocessableEntityError(
+            "Something went wrong", response=httpx.Response(
+                422, request=httpx.Request('GET', 'https://www.example.com')), body=None)
+        rate_limit_error = RateLimitError("Something went wrong", response=httpx.Response(
+            429, request=httpx.Request('GET', 'https://www.example.com'), headers={"retry-after": "0.3"}),
+            body=None)
+        # for below exception sequence, "consecutive_422_error_count" changes: 0 -> 1 -> 0 -> 1 -> 2.
+        exception_sequence = [
+            unprocessable_entity_error, rate_limit_error, unprocessable_entity_error, unprocessable_entity_error]
+        patched_test_method = mocker.patch("promptflow.tools.aoai.AzureOpenAI.chat", side_effect=exception_sequence)
+        # limit api connection error retry threshold to 2.
+        decorated_test_method = handle_openai_error(unprocessable_entity_error_tries=2)(patched_test_method)
+        with pytest.raises(ExceedMaxRetryTimes):
+            decorated_test_method()
+        assert patched_test_method.call_count == 4
+
     @pytest.mark.parametrize(
         "dummyExceptionList",
         [
@@ -187,8 +209,6 @@ class TestHandleOpenAIError:
                                         body=None),
                     BadRequestError("Something went wrong", response=httpx.get('https://www.example.com'),
                                     body=None),
-                    APIConnectionError(message="Something went wrong",
-                                       request=httpx.Request('GET', 'https://www.example.com')),
                 ]
             ),
         ],
@@ -251,6 +271,7 @@ class TestHandleOpenAIError:
             )
         assert "'name' is required if role is function," in exc_info.value.message
 
+    @pytest.mark.skip(reason="Skip temporarily because there is something issue with test AOAI resource response.")
     def test_completion_with_chat_model(self, azure_open_ai_connection):
         with pytest.raises(UserErrorException) as exc_info:
             completion(connection=azure_open_ai_connection, prompt="hello", deployment_name="gpt-35-turbo")
@@ -300,4 +321,76 @@ class TestHandleOpenAIError:
                 chat_history=chat_history,
             )
         assert error_message in exc_info.value.message
+        assert exc_info.value.error_codes == error_codes.split("/")
+
+    @pytest.mark.skip("Skip this before we figure out how to make token provider work on github action")
+    def test_authentication_fail_for_aoai_meid_token_connection(self, azure_open_ai_connection_meid):
+        prompt_template = "please complete this sentence: world war II "
+        raw_message = (
+            "please make sure you have proper role assignment on your azure openai resource"
+        )
+        error_codes = "UserError/OpenAIError/AuthenticationError"
+        with pytest.raises(WrappedOpenAIError) as exc_info:
+            chat(azure_open_ai_connection_meid, prompt=f"user:\n{prompt_template}", deployment_name="gpt-35-turbo")
+        assert raw_message in exc_info.value.message
+        assert exc_info.value.error_codes == error_codes.split("/")
+
+    def test_aoai_with_vision_model_extra_fields_error(self, azure_open_ai_connection):
+        with (
+            patch('promptflow.tools.common.get_workspace_triad') as mock_get,
+            patch('promptflow.tools.common.list_deployment_connections') as mock_list,
+            pytest.raises(LLMError) as exc_info
+        ):
+            mock_get.return_value = ("sub", "rg", "ws")
+            mock_list.return_value = {
+                Deployment("gpt-4v", "model1", "vision-preview"),
+                Deployment("deployment2", "model2", "version2")
+            }
+
+            chat(connection=azure_open_ai_connection, prompt="user:\nhello", deployment_name="gpt-4v",
+                 response_format={"type": "text"})
+
+        assert "extra fields not permitted" in exc_info.value.message
+        assert "Please kindly avoid using vision model in LLM tool" in exc_info.value.message
+
+    @pytest.mark.parametrize(
+        "prompt_template",
+        [
+            (
+                """
+                    # assistant:
+                    How can I assist you?
+
+                    # tool:
+                    ## tool_call_id:
+                    fake_tool_call_id
+                    ## content:
+                    fake_content
+                """
+            ),
+            (
+                """
+                    # assistant:
+                    ## tool_calls:
+                    [{'id': 'fake_tool_id', 'type': 'function', 'function': {'name': 'f_n', 'arguments': '{}'}}]
+
+                    # tool_1:
+                    ## tool_call_id:
+                    fake_tool_call_id
+                    ## content:
+                    fake_content
+                """
+            ),
+        ],
+    )
+    def test_chat_prompt_with_invalid_tool_message(self, azure_open_ai_connection, prompt_template):
+        error_codes = "UserError/OpenAIError/BadRequestError"
+        raw_message = (
+            "Please make sure your chat prompt includes 'tool_calls' within the 'assistant' role. Also, the "
+            "assistant message must be followed by messages with role 'tool', matching ids of assistant message "
+            "'tool_calls' property. You could refer to guideline at https://aka.ms/pfdoc/chat-prompt"
+        )
+        with pytest.raises(WrappedOpenAIError) as exc_info:
+            chat(azure_open_ai_connection, prompt=f"{prompt_template}", deployment_name="gpt-35-turbo")
+        assert raw_message in exc_info.value.message
         assert exc_info.value.error_codes == error_codes.split("/")

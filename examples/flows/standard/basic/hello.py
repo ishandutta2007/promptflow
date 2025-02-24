@@ -2,7 +2,7 @@ import os
 from openai.version import VERSION as OPENAI_VERSION
 
 from dotenv import load_dotenv
-from promptflow import tool
+from promptflow.core import tool
 
 # The inputs section will change based on the arguments of the tool function, after you save the code
 # Adding type to arguments and return value will help the system show the types properly
@@ -27,8 +27,8 @@ def get_client():
     else:
         from openai import AzureOpenAI as Client
         conn.update(
-            azure_endpoint=os.environ["AZURE_OPENAI_API_BASE"],
-            api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2023-07-01-preview"),
+            azure_endpoint=os.environ.get("AZURE_OPENAI_API_BASE", "azure"),
+            api_version=os.environ.get("OPENAI_API_VERSION", "2023-07-01-preview"),
         )
     return Client(**conn)
 
@@ -53,7 +53,7 @@ def my_python_tool(
     user: str = "",
     **kwargs,
 ) -> str:
-    if "AZURE_OPENAI_API_KEY" not in os.environ:
+    if "AZURE_OPENAI_API_KEY" not in os.environ or "AZURE_OPENAI_API_BASE" not in os.environ:
         # load environment variables from .env file
         load_dotenv()
 
